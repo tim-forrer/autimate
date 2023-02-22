@@ -1,11 +1,9 @@
-import discord
+from bot import bot
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")
+SERVER = os.getenv("DISCORD_SERVER")
 
-client = discord.Client()
-
-@bot.event
-async def on_ready():
+bot.run(TOKEN)
