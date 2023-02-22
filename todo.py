@@ -16,26 +16,48 @@ import json
 # - Channel list (1)
 # - Personal list (2)
 
-def create_list(name: str, type: int):
-    return
+@bot.group(pass_context=True)
+async def todo(ctx: Context):
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Invalid subcommand passed.")
 
-def delete_list():
-    return
+@todo.group()
+async def help(ctx: Context):
+    await ctx.send("Sending help")
 
-def add_to_list():
-    return
+@todo.group()
+async def create(ctx: Context):
+    await ctx.send("Creating list")
 
-def remove_from_list():
-    return
+@todo.group()
+async def delete(ctx: Context):
+    await ctx.send("Deleting list")
 
-def get_list():
-    return
+@todo.group()
+async def add(ctx: Context):
+    await ctx.send("Adding to list")
 
-def make_public():
-    return
+@todo.group()
+async def remove(ctx: Context):
+    await ctx.send("Removing from list")
 
-def make_private():
-    return
+@todo.group()
+async def get(ctx: Context):
+    await ctx.send("Getting list")
+
+@todo.group(pass_context=True)
+async def make(ctx: Context):
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Invalid subcommand passed.")
+
+@make.group()
+async def public(ctx: Context):
+    await ctx.send("Now public")
+
+@make.group()
+async def private(ctx: Context):
+    await ctx.send("Now private")
+
 
 class ToDoEncoder(json.JSONEncoder):
     def default(self, o):
