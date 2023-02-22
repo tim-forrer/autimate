@@ -1,6 +1,8 @@
 from typing import Optional
 import time
 import json
+from discord.ext import commands
+from discord.ext.commands import Cog, Bot, Context
 # 
 # Module that contains code relevant for todo list handling
 # Lists are stored as JSONs
@@ -16,47 +18,52 @@ import json
 # - Channel list (1)
 # - Personal list (2)
 
-@bot.group(pass_context=True)
-async def todo(ctx: Context):
-    if ctx.invoked_subcommand is None:
-        await ctx.send("Invalid subcommand passed.")
+class ToDo(Cog):
+    def __init__(self, bot: Bot):
+        self.bot = bot
+    
+    @commands.group(pass_context = True, invoke_without_command = True)
+    async def todo(self, ctx: Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid subcommand passed.")
+    
+    @todo.group()
+    async def help(self, ctx: Context):
+        await ctx.send("Sending Help")
 
-@todo.group()
-async def help(ctx: Context):
-    await ctx.send("Sending help")
+    @todo.group()
+    async def create(self, ctx: Context):
+        await ctx.send("Creating list")
 
-@todo.group()
-async def create(ctx: Context):
-    await ctx.send("Creating list")
+    @todo.group()
+    async def delete(self, ctx: Context):
+        await ctx.send("Deleting list")
 
-@todo.group()
-async def delete(ctx: Context):
-    await ctx.send("Deleting list")
+    @todo.group()
+    async def add(self, ctx: Context):
+        await ctx.send("Adding to list")
 
-@todo.group()
-async def add(ctx: Context):
-    await ctx.send("Adding to list")
+    @todo.group()
+    async def remove(self, ctx: Context):
+        await ctx.send("Removing from list")
 
-@todo.group()
-async def remove(ctx: Context):
-    await ctx.send("Removing from list")
+    @todo.group()
+    async def get(self, ctx: Context):
+        await ctx.send("Getting list")
 
-@todo.group()
-async def get(ctx: Context):
-    await ctx.send("Getting list")
+    @todo.group(pass_context=True)
+    async def make(self, ctx: Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid subcommand passed.")
 
-@todo.group(pass_context=True)
-async def make(ctx: Context):
-    if ctx.invoked_subcommand is None:
-        await ctx.send("Invalid subcommand passed.")
+    ## !todo make subgroup
+    @make.group()
+    async def public(self, ctx: Context):
+        await ctx.send("Now public")
 
-@make.group()
-async def public(ctx: Context):
-    await ctx.send("Now public")
-
-@make.group()
-async def private(ctx: Context):
-    await ctx.send("Now private")
+    @make.group()
+    async def private(self, ctx: Context):
+        await ctx.send("Now private")
 
 
 class ToDoEncoder(json.JSONEncoder):
@@ -82,7 +89,7 @@ class ToDoItem():
         self.deadline = deadline
     
     def to_json(self) -> str:
-        return json.dumps(self)
+        return json.dumps(self, cls=ToDoItem)
     
 class ToDoList():
     def __init__(
@@ -102,4 +109,4 @@ class ToDoList():
         self.items = items
     
     def to_json(self) -> str:
-        return json.dumps(self)
+        return json.dumps(self, cls=ToDoItem)
