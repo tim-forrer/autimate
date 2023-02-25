@@ -21,98 +21,13 @@ from discord.ext import commands
 # - Personal list (2)
 
 
-class ToDo(commands.GroupCog, name="todo"):
-    def __init__(self, bot: commands.Bot) -> None:
-        self.bot = bot
-        super().__init__()
-
-    @app_commands.command(  # type: ignore
-            name="create_temp",
-            description="Create a ToDo list for this channel."
-    )
-    async def create(
-        self, interaction: Interaction, scope: Optional[int] = None
-    ) -> None:
-        if scope is None:
-            scope = 1
-        # Check specified scope is allowed
-        allowed_scopes = [0, 1, 2]
-        if scope not in allowed_scopes:
-            await interaction.response.send_message(
-                "Scope must be 0 (personal), 1 (channel) or 2 (server)."
-            )
-            return
-        
-        # Figure out the scope_id
-        match scope:
-            case 0:
-                scope_id = interaction.user.id
-            case 1:
-                assert interaction.channel_id is not None
-                scope_id = interaction.channel_id
-            case 2:
-                assert interaction.guild_id is not None
-                scope_id = interaction.guild_id
-        print(scope)
-
-        # Find the path of the user's lists
-        list_path = f"lists/{interaction.user.id}.json"
-        # See if a file containing the user's lists already exists
-        # If so read from that file
-        # Else set lists to empty array (make the file later)
-        if os.path.exists(list_path):
-            with open(list_path, "r") as f:
-                lists: list[ToDoList] = json.loads(
-                    f.read(),
-                    object_hook=as_todo  # Use custom decoder
-                )
-                # Check all the lists to see if one
-                # with matching scope_id already exists
-                for list in lists:
-                    if list.scope_id == scope_id:
-                        await interaction.response.send_message(
-                            "There is already a list here!"
-                        )
-                        return
-        else:
-            lists = []
-        
-        # Get the next list id
-        with open("bot_data.json", "r") as f:
-            data = json.load(f)
-
-        this_id = data["current_list_id"] + 1
-        data["current_list_id"] = this_id
-        data["all_list_ids"].append(this_id)
-        
-        # Update the bot data
-        with open("bot_data.json", "w") as f:
-            json.dump(data, f)
-
-        new_list = ToDoList(
-            list_id=this_id,
-            authors=[interaction.user.id],
-            scope=scope,
-            scope_id=scope_id,
-            items=[],
-        )
-
-        lists.append(new_list)
-
-        with open(list_path, "w+") as f:
-            json.dump(lists, f, cls=ToDoEncoder)
-
-        await interaction.response.send_message(f"List created (#{this_id}).")
-        return
-
-
 class ToDoItem:
     def __init__(
         self,
         item_id: int,
         content: str,
         added_by: int,
-        created: int,
+        created: float,
         deadline: Optional[int],
         status: Optional[int],
     ):
@@ -122,7 +37,8 @@ class ToDoItem:
         self.created = created
         self.deadline = deadline
         if status is None:
-            self.status: int = 0  # 0 = not started, 1 = in progress, 2 = completed, 3 = on hold, 4 = abandoned
+            # 0 = not started, 1 = in progress, 2 = completed, 3 = on hold, 4 = abandoned
+            self.status: int = 0
         else:
             self.status = status
 
@@ -154,10 +70,26 @@ class ToDoList:
         self.scope = scope
         self.items = items
         self.scope_id = scope_id
+        self.item_ids = self.get_item_ids()
+
+    def get_item_ids(self) -> set[int]:
+        ids: set[int] = set()
+        for item in self.items:
+            ids.add(item.id)
+        return ids
+    
+    def get_next_item_id(self) -> int:
+        for i in range(len(self.item_ids)):
+            if i not in self.item_ids:
+                return i
+        return len(self.item_ids)
 
     def scope_str(self) -> str:
         scope_dict = {0: "User", 1: "Channel", 2: "Server"}
         return scope_dict[self.scope]
+
+    def add_item(self, item: ToDoItem) -> None:
+        self.items.append(item)
 
     def __str__(self) -> str:
         string = f"List #{self.id} (Scope: {self.scope_str()}) \n"
@@ -212,3 +144,133 @@ def as_todo(dct: dict[Any, Any]) -> Any:
                 items=dct["items"],
             )
     return dct
+
+class ToDo(commands.GroupCog, name="todo"):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        super().__init__()
+
+    @app_commands.command(  # type: ignore
+            name="create",
+            description="Create a ToDo list for this channel."
+    )
+    async def create(
+        self, interaction: Interaction, scope: Optional[int] = None
+    ) -> None:
+        if scope is None:
+            scope = 1
+        # Check specified scope is allowed
+        allowed_scopes = [0, 1, 2]
+        if scope not in allowed_scopes:
+            await interaction.response.send_message(
+                "Scope must be 0 (personal), 1 (channel) or 2 (server)."
+            )
+            return
+        
+        # Figure out the scope_id
+        match scope:
+            case 0:
+                scope_id = interaction.user.id
+            case 1:
+                assert interaction.channel_id is not None
+                scope_id = interaction.channel_id
+            case 2:
+                assert interaction.guild_id is not None
+                scope_id = interaction.guild_id
+        print(scope)
+
+        # Find the path of the user's lists
+        list_path = f"lists/{interaction.user.id}.json"
+        # See if a file containing the user's lists already exists
+        # If so read from that file
+        # Else set lists to empty array (make the file later)
+        if os.path.exists(list_path):
+            with open(list_path, "r") as f:
+                lists: list[ToDoList] = json.loads(
+                    f.read(),
+                    object_hook=as_todo
+                )
+                # Check all the lists to see if one
+                # with matching scope_id already exists
+                for list in lists:
+                    if list.scope_id == scope_id:
+                        await interaction.response.send_message(
+                            "There is already a list here!"
+                        )
+                        return
+        else:
+            lists = []
+        
+        # Get the next list id
+        with open("bot_data.json", "r") as f:
+            data = json.load(f)
+
+        this_id = data["current_list_id"] + 1
+        data["current_list_id"] = this_id
+        data["all_list_ids"].append(this_id)
+        
+        # Update the bot data
+        with open("bot_data.json", "w") as f:
+            json.dump(data, f)
+
+        new_list = ToDoList(
+            list_id=this_id,
+            authors=[interaction.user.id],
+            scope=scope,
+            scope_id=scope_id,
+            items=[],
+        )
+
+        lists.append(new_list)
+
+        with open(list_path, "w+") as f:
+            json.dump(lists, f, cls=ToDoEncoder)
+
+        await interaction.response.send_message(f"List created (#{this_id}).")
+        return
+
+
+    @app_commands.command(  # type: ignore
+        name="add",
+        description="add an item to a ToDo list"
+    )
+    async def add(
+        self,
+        interaction: Interaction,
+        list_to_add_to: int,
+        content: str,
+        deadline: Optional[int] = None
+    ):
+        list = self.get_list(interaction.user.id, list_to_add_to)
+        if list is None:
+            await interaction.response.send_message(f"List #{list_to_add_to} does not exist for #{interaction.user.name}!")
+            return
+        new_item_id = list.get_next_item_id()
+        new_item = ToDoItem(
+            item_id=new_item_id,
+            content=content,
+            added_by=interaction.user.id,
+            created=time.time(),
+            deadline=deadline,
+            status=0
+        )
+        list.add_item(new_item)
+        await interaction.response.send_message(
+            f"Added {new_item} to list #{list_to_add_to}."
+        )
+        return
+
+    def get_list(
+            self, user_id: int, list_id: int
+        ) -> Optional[ToDoList]:
+        list_path = list_path = f"lists/{user_id}.json"
+        if not os.path.exists(list_path):
+            return None
+        with open(list_path, "r") as f:
+            lists: list[ToDoList] = json.loads(
+                f.read(), object_hook=as_todo
+            )
+        for list in lists:
+            if list.id == list_id:
+                return list
+        return None
