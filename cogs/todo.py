@@ -6,6 +6,16 @@ import os
 from discord import app_commands, Interaction
 from discord.ext import commands
 
+time_format = "%Y-%m-%d %H:%M"
+
+status_dict = {
+    0: ":negative_squared_cross_mark:",
+    1: ":atm:",
+    2: ":white_check_mark:",
+    3: ":pause_button:",
+    4: ":wastebasket:",
+}
+
 
 class ToDoItem:
     def __init__(
@@ -21,34 +31,34 @@ class ToDoItem:
         self.content = content
         self.added_by = added_by
         self.created = created
-        self.deadline: Optional[datetime] = self.set_deadline(deadline)
+        self.deadline: Optional[datetime] = self.get_deadline_obj(deadline)
         if status is None:
             self.status: int = 0
         else:
             self.status = status
 
     def status_str(self) -> str:
-        status_dict = {
-            0: ":negative_squared_cross_mark:",
-            1: ":atm:",
-            2: ":white_check_mark:",
-            3: ":pause_button:",
-            4: ":wastebasket:",
-        }
         return status_dict[self.status]
 
-    def set_deadline(self, deadline: Optional[str]):
+    def get_deadline_obj(self, deadline: Optional[str]) -> None:
         if deadline is None:
-            self.deadline = None
-        else:
-            self.deadline = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
+            return None
+        return datetime.strptime(deadline, time_format)
 
     def __str__(self) -> str:
         if self.deadline is None:
-            return f"{self.status_str()} {self.content} +  [#{self.id}]"
+            return f"{self.status_str()} {self.content} [#{self.id}]"
         return (
-            f"{self.status_str()} self.content [#{self.id}] ({self.deadline})"
+            f"{self.status_str()} {self.content} " +
+            f"({self.deadline.strftime('%Y-%m-%d %H:%M')}) [#{self.id}]"
         )
+
+    def update_status(self, new_status) -> None:
+        try:
+            assert new_status in status_dict.keys()
+        except AssertionError:
+            raise ValueError("Status must take value from 0-4 inclusive")
+        self.status = new_status
 
 
 class ToDoList:
@@ -87,32 +97,26 @@ class ToDoList:
         self.items.append(item)
 
     def remove_item(self, item_id: int) -> Optional[ToDoItem]:
-        new_list: list[ToDoItem] = []
-        item_to_return = None
-        # Done this way deliberately instead of list comprehension
-        # so that the item to remove is returned to
-        # (so we can check if it was there)
-        # I think it's more efficient than looping twice
-        # (although efficiency is probably insignificant)
+        self.items = [item for item in self.items if item.id != item_id]
+        return self.get_item(item_id)
+
+    def get_item(self, item_id: int) -> Optional[ToDoItem]:
         for item in self.items:
             if item.id == item_id:
-                item_to_return = item
-            else:
-                new_list.append(item)
-        self.items = new_list
-        return item_to_return
+                return item
+        return None
 
     def __str__(self) -> str:
-        string = f"List #{self.id} (Scope: {self.scope_str()}) \n"
+        string = f"List #{self.id} ({self.scope_str()} List)\n"
         for item in self.items:
-            string += "\t- " + item.__str__() + "\n"
+            string += item.__str__() + "\n"
         return string
 
 
 class ToDoEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, ToDoItem):
-            return {
+            dct = {
                 "id": o.id,
                 "type": "ToDoItem",
                 "content": o.content,
@@ -121,6 +125,9 @@ class ToDoEncoder(json.JSONEncoder):
                 "deadline": o.deadline,
                 "status": o.status,
             }
+            if o.deadline is not None:
+                dct["deadline"] = o.deadline.strftime(time_format)
+            return dct
         elif isinstance(o, ToDoList):
             return {
                 "id": o.id,
@@ -165,7 +172,8 @@ class ToDo(commands.GroupCog, name="todo"):
         name="create", description="Create a ToDo list for this channel."
     )
     async def create(
-        self, interaction: Interaction, scope: Optional[int] = None
+        self, interaction: Interaction,
+        scope: Optional[int] = None, ephemeral: bool = True
     ) -> None:
         list_path = await self.get_list_path(interaction.user.id)
         if not os.path.exists(list_path):
@@ -173,7 +181,7 @@ class ToDo(commands.GroupCog, name="todo"):
             await self.write_to_list_file(interaction, [])
         # Figure out the scope_id
         if scope is None:
-            scope = 1
+            scope = 1  # default to being a channel ToDoList
         scope_id = await self.get_scope_id(scope, interaction)
 
         # Verify a ToDoList with the same scope_id
@@ -183,7 +191,8 @@ class ToDo(commands.GroupCog, name="todo"):
             if list.scope_id == scope_id:
                 await interaction.response.send_message(
                     f"There is already a list here with the same scope! \
-                    (#{list.id})"
+                    (#{list.id})",
+                    ephemeral=True
                 )
                 return
 
@@ -201,7 +210,10 @@ class ToDo(commands.GroupCog, name="todo"):
         # Rewrite the users lists file with the new ToDoList appended
         await self.write_to_list_file(interaction, lists)
 
-        await interaction.response.send_message(f"List created (#{this_id}).")
+        await interaction.response.send_message(
+            f"Created {new_list}",
+            ephemeral=ephemeral
+        )
         return
 
     @app_commands.command(  # type: ignore
@@ -225,7 +237,8 @@ class ToDo(commands.GroupCog, name="todo"):
             case 0:
                 await interaction.response.send_message(
                     f"I could not find a list with ID {list_id} for \
-                    {interaction.user.name}."
+                    {interaction.user.name}.",
+                    ephemeral=True
                 )
                 return
             case 1:
@@ -235,7 +248,8 @@ class ToDo(commands.GroupCog, name="todo"):
                     f"""I could not find a unique list of ID {list_id} \
                         for {interaction.user.name}.\n
                     Something has gone badly wrong...
-                    """
+                    """,
+                    ephemeral=True
                 )
                 return
 
@@ -254,7 +268,8 @@ class ToDo(commands.GroupCog, name="todo"):
         await self.write_to_list_file(interaction, lists)
 
         await interaction.response.send_message(
-            f"Added {new_item} to list #{list_to_add_to}."
+            f"Added to {list_to_add_to}",
+            ephemeral=True
         )
         return
 
@@ -262,7 +277,8 @@ class ToDo(commands.GroupCog, name="todo"):
         name="remove", description="Remove an item from a list."
     )
     async def remove(
-        self, interaction: Interaction, list_id: int, item_id: int
+        self, interaction: Interaction, list_id: int, item_id: int,
+        ephemeral: bool = True
     ) -> None:
         todolist = await self.get_list_of_id(interaction, list_id)
         removed = todolist.remove_item(item_id)
@@ -270,25 +286,76 @@ class ToDo(commands.GroupCog, name="todo"):
             assert removed is not None
         except AssertionError:
             await interaction.response.send_message(
-                f"Could not find item #{item_id} in list #{list_id}."
+                f"Could not find item #{item_id} in list #{list_id}.",
+                ephemeral=True
             )
             raise ValueError("List has no item of that id.")
         new_lists = await self.remove_list_of_id(interaction, list_id)
         new_lists.append(todolist)
         await self.write_to_list_file(interaction, new_lists)
-        await interaction.response.send_message("Removed item successfully.")
+        await interaction.response.send_message(
+            f"Removed item successfully from {todolist}",
+            ephemeral=ephemeral
+        )
         return
 
     @app_commands.command(  # type: ignore
         name="delete", description="Delete a list."
     )
-    async def delete(self, interaction: Interaction, list_id: int) -> None:
+    async def delete(
+            self,
+            interaction: Interaction,
+            list_id: int,
+            ephemeral: bool = True
+    ) -> None:
         new_lists = await self.remove_list_of_id(interaction, list_id)
         # Update the users lists file
         await self.write_to_list_file(interaction, new_lists)
 
         await interaction.response.send_message(
-            f"List #{list_id} deleted successfully."
+            f"List #{list_id} deleted successfully.",
+            ephemeral=ephemeral
+        )
+        return
+
+    @app_commands.command(  # type: ignore
+            name="list", description="Show ToDo list"
+        )
+    async def show_list(
+        self, interaction: Interaction, list_id: int, ephemeral: bool = True
+    ) -> None:
+        todolist = await self.get_list_of_id(interaction, list_id)
+        await interaction.response.send_message(
+            todolist, ephemeral=ephemeral
+        )
+        return
+
+    @app_commands.command(  # type: ignore
+            name="update",
+            description=("Update item status." +
+                         "0 (not started), 1 (in progress), "
+                         "2 (done), 3 (on hold), " +
+                         "4 (abandoned).")
+            )
+    async def update(
+        self, interaction: Interaction, list_id: int, item_id: int,
+        new_status: int = None, ephemeral: bool = True
+    ):
+        todolist = await self.get_list_of_id(interaction, list_id)
+        item = todolist.get_item(item_id)
+        if new_status is None:
+            # Ensure a valid number is picked
+            new_status = min(item.status + 1, 4)
+        try:
+            item.update_status(new_status)
+        except ValueError:
+            interaction.response.send_message("Invalid status provided")
+        new_lists = await self.remove_list_of_id(interaction, list_id)
+        new_lists.append(todolist)
+        await self.write_to_list_file(interaction, new_lists)
+        await interaction.response.send_message(
+            f"Item updated\n{todolist}",
+            ephemeral=ephemeral
         )
         return
 
@@ -301,7 +368,8 @@ class ToDo(commands.GroupCog, name="todo"):
             if list.id == list_id:
                 return list
         await interaction.response.send_message(
-            f"{interaction.user.name} does not have a list of ID {list_id}."
+            f"{interaction.user.name} does not have a list of ID {list_id}.",
+            ephemeral=True
         )
         raise ValueError("User has no list of specified ID")
 
@@ -313,7 +381,8 @@ class ToDo(commands.GroupCog, name="todo"):
             assert os.path.exists(list_path)
         except AssertionError:
             await interaction.response.send_message(
-                f"{interaction.user.name} doesn't have any lists!"
+                f"{interaction.user.name} doesn't have any lists!",
+                ephemeral=True
             )
             raise ValueError("User has no associated list file.")
 
@@ -347,7 +416,8 @@ class ToDo(commands.GroupCog, name="todo"):
             assert scope in allowed_scopes
         except AssertionError:
             await interaction.response.send_message(
-                "Invalid scope specified. Must take value of 0, 1 or 2."
+                "Invalid scope specified. Must take value of 0, 1 or 2.",
+                ephemeral=True
             )
             raise ValueError("Invalid scope specified.")
         # Figure out the scope_id
@@ -381,7 +451,7 @@ class ToDo(commands.GroupCog, name="todo"):
         # Find the smallest positive int that's not
         # already a list id.
         this_id = len(list_ids)
-        for i in range(list_ids):
+        for i in range(len(list_ids)):
             if i not in list_ids:
                 this_id = i
                 break
@@ -399,7 +469,8 @@ class ToDo(commands.GroupCog, name="todo"):
             assert os.path.exists(path)
         except AssertionError:
             await interaction.response.send_message(
-                f"{interaction.user.name} doesn't have any lists!"
+                f"{interaction.user.name} doesn't have any lists!",
+                ephemeral=True
             )
             raise ValueError("User has no associated list file.")
 
@@ -418,7 +489,8 @@ class ToDo(commands.GroupCog, name="todo"):
             if len(lists) == len(new_lists):
                 await interaction.response.send_message(
                     f"I could not find a list with ID {list_id} for \
-                        {interaction.user.name}."
+                        {interaction.user.name}.",
+                    ephemeral=True
                 )
                 raise ValueError("User has no list of specified ID.")
             else:
@@ -426,6 +498,7 @@ class ToDo(commands.GroupCog, name="todo"):
                     f"""There are too many lists of id {list_id} for \
                         {interaction.user.name}.\n
                     Literally no clue how that has happened.
-                    """
+                    """,
+                    ephemeral=True
                 )
                 raise ValueError("User has too many lists of specified ID.")

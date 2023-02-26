@@ -28,12 +28,14 @@ async def on_ready():
 
 @bot.command(name="sync")  # type: ignore
 async def sync(ctx: commands.Context):
+    print("Sync started")
     await bot.tree.sync(guild=guild)
     await ctx.send("Synced")
 
 
 @bot.command(name="syncglobal")  # type: ignore
 async def syncglobal(ctx: commands.Context):
+    print("Global sync started")
     await bot.tree.sync()
     await ctx.send("Synced global (may take a while to reflect.)")
 
