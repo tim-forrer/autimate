@@ -327,7 +327,7 @@ class ToDo(commands.GroupCog, name="todo"):
     ) -> None:
         # If no list_id is specified then default to the channel of the command
         if list_id is None:
-            lists: list[ToDoList] = self.get_lists_for_user(
+            lists: list[ToDoList] = await self.get_lists_for_user(
                 interaction.user.id
             )
             todolist_list = [
@@ -343,13 +343,13 @@ class ToDo(commands.GroupCog, name="todo"):
                 return
             except AssertionError:
                 if len(todolist_list) == 0:
-                    interaction.response.send_message(
+                    await interaction.response.send_message(
                         "There is no ToDoList for this channel\n"
                         + "Please specify the ID of the list you want to see",
                         ephemeral=True,
                     )
                 else:
-                    interaction.response.send_message(
+                    await interaction.response.send_message(
                         "I found too many lists for this channel\n"
                         + "This is a big error on my part",
                         ephemeral=True,
