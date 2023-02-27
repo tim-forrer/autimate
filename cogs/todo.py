@@ -346,13 +346,13 @@ class ToDo(commands.GroupCog, name="todo"):
                     interaction.response.send_message(
                         "There is no ToDoList for this channel\n"
                         + "Please specify the ID of the list you want to see",
-                        ephemeral=ephemeral,
+                        ephemeral=True,
                     )
                 else:
                     interaction.response.send_message(
                         "I found too many lists for this channel\n"
                         + "This is a big error on my part",
-                        ephemeral=ephemeral,
+                        ephemeral=True,
                     )
                 raise ValueError("Invalid scope id specified")
 
