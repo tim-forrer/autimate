@@ -328,7 +328,7 @@ class ToDo(commands.GroupCog, name="todo"):
         # If no list_id is specified then default to the channel of the command
         if list_id is None:
             lists: list[ToDoList] = await self.get_lists_for_user(
-                interaction.user.id
+                interaction
             )
             todolist_list = [
                 todolist
