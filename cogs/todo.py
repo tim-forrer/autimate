@@ -49,8 +49,8 @@ class ToDoItem:
         if self.deadline is None:
             return f"{self.status_str()} {self.content} [#{self.id}]"
         return (
-            f"{self.status_str()} {self.content} " +
-            f"({self.deadline.strftime('%Y-%m-%d %H:%M')}) [#{self.id}]"
+            f"{self.status_str()} {self.content} "
+            + f"({self.deadline.strftime('%Y-%m-%d %H:%M')}) [#{self.id}]"
         )
 
     def update_status(self, new_status) -> None:
@@ -172,8 +172,10 @@ class ToDo(commands.GroupCog, name="todo"):
         name="create", description="Create a ToDo list for this channel."
     )
     async def create(
-        self, interaction: Interaction,
-        scope: Optional[int] = None, ephemeral: bool = True
+        self,
+        interaction: Interaction,
+        scope: Optional[int] = None,
+        ephemeral: bool = True,
     ) -> None:
         list_path = await self.get_list_path(interaction.user.id)
         if not os.path.exists(list_path):
@@ -192,7 +194,7 @@ class ToDo(commands.GroupCog, name="todo"):
                 await interaction.response.send_message(
                     f"There is already a list here with the same scope! \
                     (#{list.id})",
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 return
 
@@ -211,8 +213,7 @@ class ToDo(commands.GroupCog, name="todo"):
         await self.write_to_list_file(interaction, lists)
 
         await interaction.response.send_message(
-            f"Created {new_list}",
-            ephemeral=ephemeral
+            f"Created {new_list}", ephemeral=ephemeral
         )
         return
 
@@ -238,7 +239,7 @@ class ToDo(commands.GroupCog, name="todo"):
                 await interaction.response.send_message(
                     f"I could not find a list with ID {list_id} for \
                     {interaction.user.name}.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 return
             case 1:
@@ -249,7 +250,7 @@ class ToDo(commands.GroupCog, name="todo"):
                         for {interaction.user.name}.\n
                     Something has gone badly wrong...
                     """,
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 return
 
@@ -268,8 +269,7 @@ class ToDo(commands.GroupCog, name="todo"):
         await self.write_to_list_file(interaction, lists)
 
         await interaction.response.send_message(
-            f"Added to {list_to_add_to}",
-            ephemeral=True
+            f"Added to {list_to_add_to}", ephemeral=True
         )
         return
 
@@ -277,8 +277,11 @@ class ToDo(commands.GroupCog, name="todo"):
         name="remove", description="Remove an item from a list."
     )
     async def remove(
-        self, interaction: Interaction, list_id: int, item_id: int,
-        ephemeral: bool = True
+        self,
+        interaction: Interaction,
+        list_id: int,
+        item_id: int,
+        ephemeral: bool = True,
     ) -> None:
         todolist = await self.get_list_of_id(interaction, list_id)
         removed = todolist.remove_item(item_id)
@@ -287,15 +290,14 @@ class ToDo(commands.GroupCog, name="todo"):
         except AssertionError:
             await interaction.response.send_message(
                 f"Could not find item #{item_id} in list #{list_id}.",
-                ephemeral=True
+                ephemeral=True,
             )
             raise ValueError("List has no item of that id.")
         new_lists = await self.remove_list_of_id(interaction, list_id)
         new_lists.append(todolist)
         await self.write_to_list_file(interaction, new_lists)
         await interaction.response.send_message(
-            f"Removed item successfully from {todolist}",
-            ephemeral=ephemeral
+            f"Removed item successfully from {todolist}", ephemeral=ephemeral
         )
         return
 
@@ -303,43 +305,76 @@ class ToDo(commands.GroupCog, name="todo"):
         name="delete", description="Delete a list."
     )
     async def delete(
-            self,
-            interaction: Interaction,
-            list_id: int,
-            ephemeral: bool = True
+        self, interaction: Interaction, list_id: int, ephemeral: bool = True
     ) -> None:
         new_lists = await self.remove_list_of_id(interaction, list_id)
         # Update the users lists file
         await self.write_to_list_file(interaction, new_lists)
 
         await interaction.response.send_message(
-            f"List #{list_id} deleted successfully.",
-            ephemeral=ephemeral
+            f"List #{list_id} deleted successfully.", ephemeral=ephemeral
         )
         return
 
     @app_commands.command(  # type: ignore
-            name="list", description="Show ToDo list"
-        )
+        name="list", description="Show ToDo list"
+    )
     async def show_list(
-        self, interaction: Interaction, list_id: int, ephemeral: bool = True
+        self,
+        interaction: Interaction,
+        list_id: Optional[int],
+        ephemeral: bool = True,
     ) -> None:
+        # If no list_id is specified then default to the channel of the command
+        if list_id is None:
+            lists: list[ToDoList] = self.get_lists_for_user(
+                interaction.user.id
+            )
+            todolist_list = [
+                todolist
+                for todolist in lists
+                if todolist.scope_id == interaction.channel_id
+            ]
+            try:
+                assert len(todolist_list) == 1
+                await interaction.response.send_message(
+                    todolist_list[0], ephemeral=ephemeral
+                )
+                return
+            except AssertionError:
+                if len(todolist_list) == 0:
+                    interaction.response.send_message(
+                        "There is no ToDoList for this channel\n"
+                        + "Please specify the ID of the list you want to see",
+                        ephemeral=ephemeral,
+                    )
+                else:
+                    interaction.response.send_message(
+                        "I found too many lists for this channel\n"
+                        + "This is a big error on my part",
+                        ephemeral=ephemeral,
+                    )
+                raise ValueError("Invalid scope id specified")
+
+        # Else get the specified ToDoList
         todolist = await self.get_list_of_id(interaction, list_id)
-        await interaction.response.send_message(
-            todolist, ephemeral=ephemeral
-        )
+        await interaction.response.send_message(todolist, ephemeral=ephemeral)
         return
 
     @app_commands.command(  # type: ignore
-            name="update",
-            description=("Update item status." +
-                         "0 (not started), 1 (in progress), "
-                         "2 (done), 3 (on hold), " +
-                         "4 (abandoned).")
-            )
+        name="update",
+        description=(
+            "Update item status." + "0 (not started), 1 (in progress), "
+            "2 (done), 3 (on hold), " + "4 (abandoned)."
+        ),
+    )
     async def update(
-        self, interaction: Interaction, list_id: int, item_id: int,
-        new_status: int = None, ephemeral: bool = True
+        self,
+        interaction: Interaction,
+        list_id: int,
+        item_id: int,
+        new_status: int = None,
+        ephemeral: bool = True,
     ):
         todolist = await self.get_list_of_id(interaction, list_id)
         item = todolist.get_item(item_id)
@@ -354,8 +389,7 @@ class ToDo(commands.GroupCog, name="todo"):
         new_lists.append(todolist)
         await self.write_to_list_file(interaction, new_lists)
         await interaction.response.send_message(
-            f"Item updated\n{todolist}",
-            ephemeral=ephemeral
+            f"Item updated\n{todolist}", ephemeral=ephemeral
         )
         return
 
@@ -369,7 +403,7 @@ class ToDo(commands.GroupCog, name="todo"):
                 return list
         await interaction.response.send_message(
             f"{interaction.user.name} does not have a list of ID {list_id}.",
-            ephemeral=True
+            ephemeral=True,
         )
         raise ValueError("User has no list of specified ID")
 
@@ -382,7 +416,7 @@ class ToDo(commands.GroupCog, name="todo"):
         except AssertionError:
             await interaction.response.send_message(
                 f"{interaction.user.name} doesn't have any lists!",
-                ephemeral=True
+                ephemeral=True,
             )
             raise ValueError("User has no associated list file.")
 
@@ -417,7 +451,7 @@ class ToDo(commands.GroupCog, name="todo"):
         except AssertionError:
             await interaction.response.send_message(
                 "Invalid scope specified. Must take value of 0, 1 or 2.",
-                ephemeral=True
+                ephemeral=True,
             )
             raise ValueError("Invalid scope specified.")
         # Figure out the scope_id
@@ -470,7 +504,7 @@ class ToDo(commands.GroupCog, name="todo"):
         except AssertionError:
             await interaction.response.send_message(
                 f"{interaction.user.name} doesn't have any lists!",
-                ephemeral=True
+                ephemeral=True,
             )
             raise ValueError("User has no associated list file.")
 
@@ -490,7 +524,7 @@ class ToDo(commands.GroupCog, name="todo"):
                 await interaction.response.send_message(
                     f"I could not find a list with ID {list_id} for \
                         {interaction.user.name}.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 raise ValueError("User has no list of specified ID.")
             else:
@@ -499,6 +533,6 @@ class ToDo(commands.GroupCog, name="todo"):
                         {interaction.user.name}.\n
                     Literally no clue how that has happened.
                     """,
-                    ephemeral=True
+                    ephemeral=True,
                 )
                 raise ValueError("User has too many lists of specified ID.")
