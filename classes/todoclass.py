@@ -34,7 +34,6 @@ class ToDoItem:
     def get_deadline_obj(self, deadline: Optional[str]) -> Optional[datetime]:
         if deadline is None:
             return None
-        assert TIME_FORMAT is not None
         return datetime.strptime(deadline, TIME_FORMAT)
 
     def __str__(self) -> str:
@@ -169,7 +168,6 @@ def as_todo(dct: dict[Any, Any]) -> Any:
     return dct
 
 async def get_user_file_path(user_id: int) -> str:
-        assert LISTS_DIR is not None
         return LISTS_DIR.replace("{user_id}", str(user_id))
 
 async def load_user_lists(user_id: int) -> list[ToDoList]:
@@ -200,7 +198,6 @@ async def write_lists_to_user_file(user_id: int, tdlists: list[ToDoList]) -> Non
     return
 
 async def get_next_list_id() -> int:
-    assert BOT_DATA is not None
     with open(BOT_DATA, "r") as f:
         all_ids = json.load(f)["all_list_ids"]    
     next_id = len(all_ids)
@@ -210,7 +207,6 @@ async def get_next_list_id() -> int:
     return next_id
 
 async def add_to_list_ids(list_id: int) -> None:
-    assert BOT_DATA is not None
     with open(BOT_DATA, "r") as f:
         all_ids_arr = json.load(f)
     
@@ -223,7 +219,6 @@ async def add_to_list_ids(list_id: int) -> None:
     return
 
 async def remove_from_list_ids(list_id: int) -> None:
-    assert BOT_DATA is not None
     with open(BOT_DATA, "r") as f:
         all_ids_arr = json.load(f)
         print(all_ids_arr)
