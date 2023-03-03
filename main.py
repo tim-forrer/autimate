@@ -15,8 +15,12 @@ assert SERVER_ID is not None
 
 guild = discord.Object(SERVER_ID)
 
+intents = discord.Intents()
+intents.messages = True
+intents.message_content = True
+
 bot = commands.Bot(
-    command_prefix="!", intents=discord.Intents.all(), application_id=APP_ID
+    command_prefix="!", intents=intents, application_id=APP_ID
 )
 
 
