@@ -1,11 +1,11 @@
 from datetime import datetime, date
+from tokenize import group
 from typing import Optional, Any
 import json
 from dotenv import load_dotenv
 import os
 from discord import Embed, Colour
 
-# Get environment variables
 TIME_FORMAT = "%Y-%m-%d %H:%M"
 STATUS_DICT = {0: ":negative_squared_cross_mark:",1: ":atm:",2: ":white_check_mark:",3: ":pause_button:",4: ":wastebasket:"}
 STATUS_DICT_TXT = {0: "Not Started",1: "In Progress",2: "Done",3: "Paused",4: "Abandoned"}
@@ -37,7 +37,7 @@ class ToDoItem:
         return datetime.strptime(deadline, TIME_FORMAT)
 
     def __str__(self) -> str:
-        string = f"{self.status_str()} {self.content}"
+        string = f"(#{self.id}) {self.content}"
         if self.deadline is not None:
             string += f"({self.deadline.strftime('%Y-%m-%d %H:%M')})"
         return string
@@ -88,8 +88,10 @@ class ToDoList:
         self.items.append(item)
 
     def remove_item(self, item_id: int) -> Optional[ToDoItem]:
-        self.items = [item for item in self.items if item.id != item_id]
-        return self.get_item(item_id)
+        removed = self.get_item(item_id)
+        if removed is not None:
+            self.items.remove(removed)
+        return removed
 
     def get_item(self, item_id: int) -> Optional[ToDoItem]:
         for item in self.items:
@@ -102,7 +104,7 @@ class ToDoList:
         for i in STATUS_DICT.keys():
             grouped[i] = []
             for tditem in self.items:
-                if tditem.id == i:
+                if tditem.status == i:
                     grouped[i].append(tditem)
         return grouped
     
@@ -114,11 +116,11 @@ class ToDoList:
         )
         grouped = self.get_items_grouped()
         for i in STATUS_DICT_TXT:
-            for j, tditem in enumerate(grouped[i]):
-                if j == 0:
-                    emb.add_field(name=STATUS_DICT_TXT[i], value=tditem)
-                else:
-                    emb.add_field(name="\u200b", value=tditem)
+            joined = "\n".join([tditem.__str__() for tditem in grouped[i]])
+            emb.add_field(
+                name=STATUS_DICT[i] + STATUS_DICT_TXT[i],
+                value=f"{joined}",
+                inline=False)
         emb.set_footer(text = f"List ID {self.id}")
         return emb
 
@@ -178,7 +180,7 @@ async def load_user_lists(user_id: int) -> list[ToDoList]:
             user_lists: list[ToDoList] = json.load(f, object_hook=as_todo)
         return user_lists
 
-async def load_list_of_id(self, user_id: int, list_id: int) -> ToDoList:
+async def load_list_of_id(user_id: int, list_id: int) -> ToDoList:
     user_lists: list[ToDoList] = await load_user_lists(user_id)
     for tdlist in user_lists:
         if tdlist.id == list_id:
@@ -188,6 +190,7 @@ async def load_list_of_id(self, user_id: int, list_id: int) -> ToDoList:
 async def write_list_to_user_file(user_id: int, tdlist: ToDoList) -> None:
     user_lists = await load_user_lists(user_id)
     user_lists = [other_tdlist for other_tdlist in user_lists if tdlist.id != other_tdlist.id]
+    user_lists.append(tdlist)
     await write_lists_to_user_file(user_id, user_lists)
     return
 
@@ -221,7 +224,6 @@ async def add_to_list_ids(list_id: int) -> None:
 async def remove_from_list_ids(list_id: int) -> None:
     with open(BOT_DATA, "r") as f:
         all_ids_arr = json.load(f)
-        print(all_ids_arr)
     
     all_ids: list[int] = all_ids_arr["all_list_ids"]
     if list_id not in all_ids:
@@ -229,5 +231,4 @@ async def remove_from_list_ids(list_id: int) -> None:
     all_ids.remove(list_id)
     with open(BOT_DATA, "w") as f:
         json.dump(all_ids_arr, f)
-        print(all_ids_arr)
     return
